@@ -1,6 +1,7 @@
 import datetime
 
 from django.contrib.auth.models import User
+from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
 from rest_framework import parsers, status
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.generics import CreateAPIView, RetrieveAPIView, ListAPIView
@@ -14,8 +15,7 @@ from .serializers import UserSerializer
 
 class CreateUserAPIView(CreateAPIView):
     """ Create a new user - possible without token. """
-    # todo: уточнить по поводу необходимости токена???
-    permission_classes = [AllowAny]
+    permission_classes = (IsAuthenticated,)
     serializer_class = UserSerializer
 
     def get(self, request):
@@ -24,8 +24,7 @@ class CreateUserAPIView(CreateAPIView):
 
 class CustomAuthToken(ObtainAuthToken):
     """
-    Get new User token with username and password
-    or refresh token created date.
+    Get new User token with username and password.
 
     Example:
             Request data:
@@ -39,15 +38,13 @@ class CustomAuthToken(ObtainAuthToken):
             }
     """
     parser_classes = (parsers.JSONParser,)
+    permission_classes = (IsAuthenticated,)
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data['user']
             token, created = Token.objects.get_or_create(user=user, is_active=True)
-            if not created:
-                token.created = datetime.datetime.utcnow()
-                token.save()
 
             return Response({
                 'token': token.key,
@@ -67,23 +64,19 @@ class CustomAuthLogOut(APIView):
         return self.logout(request)
 
     def logout(self, request):
-        try:
-            user = User.objects.get(username=request.data['username'])
-            token = Token.objects.get(user=user, key=request.data['token'])
-            if token and token.is_active:
-                token.is_active = False
-                token.save()
-                return Response({
-                    'detail': f'Successfully logged out.\n Token {token.key} was deactivated.'
-                }, status=status.HTTP_200_OK,)
+        token = getattr(request, 'auth', None)
 
+        if token and token.is_active:
+            token.is_active = False
+            token.save()
             return Response({
-                'detail': 'Bad request. Wrong credentials.'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        except (AttributeError, User.DoesNotExist, Token.DoesNotExist):
-            return Response({
-                'detail': 'Something was wrong. Bad request.'
-            }, status=status.HTTP_400_BAD_REQUEST)
+                'detail': f'Successfully logged out.\n Token {token.key} was deactivated.'
+            }, status=status.HTTP_200_OK,)
+
+        #     logout(request) - from django.contrib.auth import logout
+        return Response({
+            'detail': 'Bad request. Wrong credentials.'
+        }, status=status.HTTP_401_UNAUTHORIZED)
 
 
 class GetUserDataApiView(APIView):

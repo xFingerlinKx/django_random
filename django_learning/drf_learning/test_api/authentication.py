@@ -9,9 +9,8 @@ from test_api.models import Token
 
 class ExpiringTokenAuthentication(TokenAuthentication):
     """
-    Expiring token for mobile and desktop clients.
-    It expires every {n} hrs requiring client to supply valid username
-    and password for new one to be created.
+    Expiring token. It expires every {n} hrs requiring client
+    to supply valid username and password for new one to be created.
     """
 
     model = Token

@@ -8,6 +8,7 @@ class TokenAdmin(admin.ModelAdmin):
     list_display = ('key', 'user', 'created', 'is_active')
     search_fields = ('user__email', 'user__username')
     ordering = ('-created',)
+    list_filter = ('is_active',)
 
 
 class TokenInline(admin.TabularInline):
@@ -15,7 +16,6 @@ class TokenInline(admin.TabularInline):
 
     def get_queryset(self, request):
         """ Only active tokens """
-        # todo: должны отображаться только активные токены
         queryset = Token.objects.filter(is_active=True)
         return queryset
 
