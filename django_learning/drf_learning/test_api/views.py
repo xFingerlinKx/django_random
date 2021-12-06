@@ -24,7 +24,8 @@ class CreateUserAPIView(CreateAPIView):
 
 class CustomAuthToken(ObtainAuthToken):
     """
-    Get User token with username and password.
+    Get new User token with username and password
+    or refresh token created date.
 
     Example:
             Request data:
@@ -41,10 +42,9 @@ class CustomAuthToken(ObtainAuthToken):
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
-        print('serializer ====', serializer)
         if serializer.is_valid():
             user = serializer.validated_data['user']
-            token, created = Token.objects.get_or_create(user=user)
+            token, created = Token.objects.get_or_create(user=user, is_active=True)
             if not created:
                 token.created = datetime.datetime.utcnow()
                 token.save()
@@ -58,9 +58,37 @@ class CustomAuthToken(ObtainAuthToken):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+class CustomAuthLogOut(APIView):
+    """ Logout user - deactivate user token """
+    parser_classes = (parsers.JSONParser,)
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        return self.logout(request)
+
+    def logout(self, request):
+        try:
+            user = User.objects.get(username=request.data['username'])
+            token = Token.objects.get(user=user, key=request.data['token'])
+            if token and token.is_active:
+                token.is_active = False
+                token.save()
+                return Response({
+                    'detail': f'Successfully logged out.\n Token {token.key} was deactivated.'
+                }, status=status.HTTP_200_OK,)
+
+            return Response({
+                'detail': 'Bad request. Wrong credentials.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except (AttributeError, User.DoesNotExist, Token.DoesNotExist):
+            return Response({
+                'detail': 'Something was wrong. Bad request.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
 class GetUserDataApiView(APIView):
     serializer_class = UserSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request):
         content = {
@@ -71,17 +99,16 @@ class GetUserDataApiView(APIView):
 
 
 # curl -X  GET -H 'Authorization: Token 02a6fe8d7d82fc83f5d4e51e362c6044335b7ed0' http://127.0.0.1:8000/api/users/8/
-# admin token 1fcd9f7729badc0c6ed0ba3c3c9ea5564d712731
 # todo: можно реализовать через viewsets ModelViewSet
 class UserList(ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated,)
 
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
 
 class UserDetail(RetrieveAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = (IsAuthenticated,)
 
     queryset = User.objects.all()
     serializer_class = UserSerializer

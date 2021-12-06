@@ -13,6 +13,12 @@ class TokenAdmin(admin.ModelAdmin):
 class TokenInline(admin.TabularInline):
     model = Token
 
+    def get_queryset(self, request):
+        """ Only active tokens """
+        # todo: должны отображаться только активные токены
+        queryset = Token.objects.filter(is_active=True)
+        return queryset
+
 
 class UserAdmin(UserAdmin):
     inlines = (TokenInline,)
