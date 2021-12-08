@@ -1,0 +1,5 @@
+[run]
+omit = */manage.py
+       */drf_learning/drf_learning/*
+       */test_api/tests/*
+       */test_api/migrations/*

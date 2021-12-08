@@ -1,7 +1,8 @@
-import datetime
-
+import pytz
+from django.conf import settings
+from django.contrib.auth import logout
 from django.contrib.auth.models import User
-from django.core.exceptions import MultipleObjectsReturned, ObjectDoesNotExist
+from django.utils import timezone
 from rest_framework import parsers, status
 from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.generics import CreateAPIView, RetrieveAPIView, ListAPIView
@@ -17,9 +18,6 @@ class CreateUserAPIView(CreateAPIView):
     """ Create a new user - possible without token. """
     permission_classes = (IsAuthenticated,)
     serializer_class = UserSerializer
-
-    def get(self, request):
-        return Response(request.data)
 
 
 class CustomAuthToken(ObtainAuthToken):
@@ -38,19 +36,25 @@ class CustomAuthToken(ObtainAuthToken):
             }
     """
     parser_classes = (parsers.JSONParser,)
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (AllowAny,)
 
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
             user = serializer.validated_data['user']
-            token, created = Token.objects.get_or_create(user=user, is_active=True)
+
+            utc_now = timezone.now()
+            utc_now = utc_now.replace(tzinfo=pytz.utc)
+
+            token, created = Token.objects.get_or_create(
+                user=user,
+                created__gt=utc_now - settings.TOKEN_TTL
+            )
 
             return Response({
                 'token': token.key,
                 'user_id': user.pk,
-                'email': user.email
-            })
+            }, status=status.HTTP_200_OK)
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -59,10 +63,12 @@ class CustomAuthLogOut(APIView):
     """ Logout user - deactivate user token """
     parser_classes = (parsers.JSONParser,)
     permission_classes = (IsAuthenticated,)
+    serializer_class = UserSerializer
 
     def post(self, request):
         return self.logout(request)
 
+    # noinspection PyMethodMayBeStatic
     def logout(self, request):
         token = getattr(request, 'auth', None)
 
@@ -73,7 +79,7 @@ class CustomAuthLogOut(APIView):
                 'detail': f'Successfully logged out.\n Token {token.key} was deactivated.'
             }, status=status.HTTP_200_OK,)
 
-        #     logout(request) - from django.contrib.auth import logout
+        logout(request)
         return Response({
             'detail': 'Bad request. Wrong credentials.'
         }, status=status.HTTP_401_UNAUTHORIZED)
@@ -83,6 +89,7 @@ class GetUserDataApiView(APIView):
     serializer_class = UserSerializer
     permission_classes = (IsAuthenticated,)
 
+    # noinspection PyMethodMayBeStatic
     def get(self, request):
         content = {
             'user': str(request.user),
